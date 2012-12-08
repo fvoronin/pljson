@@ -62,7 +62,7 @@ Redistributions in binary form must reproduce the above copyright notice, this l
 Neither the name of Ruby Willow, Inc. nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.<br /><br />
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 </p>
-
+<a name="pt0"></a>
 <h1>PLJSON Library</h1>
 
 <p>The PLJSON library is a unit that allows you to do three things:</p>
@@ -81,7 +81,34 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 <li>The Java "glue" that translates between PL/SQL and GSON.</li>
 </ul>
 
-<h2>Part 1 - Dealing with JSON in SQL</h2>
+<p>This document is divided into the following sections:</p>
+<ul>
+<li><a href="#pt1">Part 1 - Installation</a>: How to install PLJSON into your database.</li>
+<li><a href="#pt2">Part 2 - Dealing with JSON in SQL</a>: The inevitable quirks in dealing with JSON in SQL</li>
+<li><a href="#pt3">Part 3 - The SQL Types</a>: Describes the SQL Object types you will use in this library</li>
+<li><a href="#pt4">Part 4 - The PLJSON Package</a>: Describes the package you will use in this library, and some of its options</li>
+<li><a href="#pt5">Part 5 - Example Code</a></li>
+</ul>
+
+<a name="pt1"></a>
+<h2>Part 1 - Installation</h2>
+
+<p>The installation of PLJSON takes two steps:</p>
+<ul>
+<li>In SQL*Plus, run the ./plsql/install.sql script.</li>
+<li>Use the <span class="monospc">loadjava</span> utility to load ./java/gson-2.2.2.jar and ./java/pljson.jar</li>
+</ul>
+
+<p>Before running the install.sql script, take a look at it in an editor and make sure it does what you want. Currently, the section that
+creates the PLJSON user is commented out. You can create that user manually, or simply uncomment that block of script. Note that block also
+drops the PLJSON user if it exists. Generally that's nothing to worry about, but I prefer to keep the scripts as safe as possible.</p>
+
+<p>You can refer to the <a href="http://docs.oracle.com/cd/E11882_01/java.112/e16548/ssid.htm#JJDBC28261" target="_blank">Oracle documentation</a> for <span class="monospc">loadjava</span>, but the quick reference is:</p>
+<pre>  loadjava -schema PLJSON -resolve -user "UserWith/DbaPrivs" -verbose gson-2.2.2.jar pljson.jar</pre>
+<p>Note that the jar files must be in the directory where you are running <span class="monospc">loadjava</span>.</p>
+<a href="#pt0">back to top</a>
+<a name="pt2"></a>
+<h2>Part 2 - Dealing with JSON in SQL</h2>
 
 <p>JSON defines a few particulars (go <a href="http://json.org/" target="_blank">here</a> for details):</p>
 
@@ -97,8 +124,9 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 <li>Do not instantiate the PLJSON objects using normal constructors. Instead, use the PLJSON package functions "createXxxx". This is partly because of the following point:</li>
 <li>Do not attempt to use or modify the "~" attribute of the <span class="monospc">pljsonElement</span> type. It is intended to be private/abstract, but SQL Types must have at least one public attribute, even if they are abstract. This attribute is used internally in the Java layer of this library, so modifying it will create problems for you.</li>
 </ul>
-
-<h2>Part 2 - The SQL Types</h2>
+<a href="#pt0">back to top</a>
+<a name="pt3"></a>
+<h2>Part 3 - The SQL Types</h2>
 
 <p>The SQL Types are defined as follows:</p>
 
@@ -124,7 +152,6 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 <p>Note that <span class="monospc">getString</span>, <span class="monospc">getNumber</span>, and <span class="monospc">getBoolean</span> are considered convenience methods and will return "best-effort"
 for primitive types. <span class="monospc">getString</span> will return a string-ified value for a number, and for Boolean, the character "*" (asterisk/star) for a true value and a "&nbsp;" (space)
 for a false value. If a type can't be readily translated, NULL is returned. For example, a call to <span class="monospc">getNumber</span> for a Boolean type will return NULL.</p>
-
 
 <h3>PLJSONOBJECT (<span class="monospc">pljsonObject</span>)</h3>
 <p>Subtype of <span class="monospc">pljsonElement</span>. This is the most complex of the types. It is defined as follows:</p>
@@ -229,8 +256,9 @@ for a false value. If a type can't be readily translated, NULL is returned. For 
 </span></pre>
 
 <p>You should use the <span class="monospc">value</span> method in your code, or use the <span class="monospc">getBoolean</span> method from <span class="monospc">pljsonElement</span>. When serialized in JSON output, this primitive is properly converted to use the words <strong>true</strong> and <strong>false</strong> appropriately in the document.</p>
-
-<h2>Part 3 - The PLJSON Package</h2>
+<a href="#pt0">back to top</a>
+<a name="pt4"></a>
+<h2>Part 4 - The PLJSON Package</h2>
 
 <p>This package is quite simple.</p>
 <ul>
@@ -438,8 +466,9 @@ for a false value. If a type can't be readily translated, NULL is returned. For 
 </span></pre>
 
 <p>These also should be self-explanatory. Note that if you pass an invalid type to a converter, an exception will be thrown.</p>
-
-<h2>Part 4: Example Code</h2>
+<a href="#pt0">back to top</a>
+<a name="pt5"></a>
+<h2>Part 5: Example Code</h2>
 
 <p>The following complete script can be run in SQL*Plus. Copy it into a text file and run it in a database that has PLJSON installed. Notice on the Object and Array demos that you can select from the items (tuple or elements). Or in the last example, you can programmatically look for a particular item.</p>
 
@@ -692,6 +721,7 @@ var json <span class="syntax-KEYWORD1">varchar2</span><span class="syntax-OPERAT
 
 </span></pre>
 
+<a href="#pt0">back to top</a>
 
 </div></div></body>
 </html>
