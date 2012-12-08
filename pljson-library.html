@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" dir="ltr" lang="en">
+<head>
+<meta charset="utf-8">
+<title>The PLJSON Library</title>
+
+<style type="text/css">
+
+/* http://meyerweb.com/eric/tools/css/reset/
+   v2.0 | 20110126
+   License: none (public domain) */
+html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre, a, abbr, acronym, address, big, cite, code, del, dfn, em, img, ins, kbd, q, s, samp, small, strike, strong, sub, sup, tt, var, b, u, i, center, dl, dt, dd, ol, ul, li, fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td, article, aside, canvas, details, embed, figure, figcaption, footer, header, hgroup, menu, nav, output, ruby, section, summary, time, mark, audio, video
+{ margin: 0; padding: 0; border: 0; font-size: 1em; font: inherit; vertical-align: baseline; }
+article, aside, details, figcaption, figure, footer, header, hgroup, menu, nav, section { display: block; }
+body { line-height: 1; }
+ol, ul { list-style: none; }
+blockquote, q { quotes: none; }
+blockquote:before, blockquote:after, q:before, q:after { content: ''; content: none; }
+table { border-collapse: collapse; border-spacing: 0; }
+/* end of css reset */
+body { background-color: #A0A0A0; }
+#wrapper { margin: 0 auto; width: 850px; position: relative; }
+#content { background-color: #FCFCFC; padding: 2em; }
+p { margin-top: 1em; }
+h1 { margin-top: 2em; font-size: x-large; font-weight: bold; color: maroon; }
+h2 { margin-top: 1.5em; font-size: large; font-weight: bold; color: maroon; }
+h3 { margin-top: 1.5em; font-style: italic; color: olive; font-weight: bold; font-family: serif; }
+ul { margin-left: 2em; margin-right: 2em; margin-top: 1em; }
+li { list-style-type: circle; padding: 0.3em; }
+strong { font-style: italic; }
+pre { margin-top: 1.5em; font-family: monospace; }
+.legal { font-family: serif; font-style: italic; }
+.monospc { font-family: monospace; }
+.syntax-NULL { color: #000000; }
+.syntax-COMMENT1 { color: #990099; font-style: italic; }
+.syntax-COMMENT2 { color: #ff0000; font-style: italic; }
+.syntax-COMMENT3 { color: #6600cc; font-style: italic; }
+.syntax-COMMENT4 { color: #cc6600; }
+.syntax-DIGIT { color: #9999ff; }
+.syntax-FUNCTION { color: #000099; font-weight: bold; }
+.syntax-INVALID { color: #ff0000; font-weight: bold; font-style: italic; }
+.syntax-KEYWORD1 { color: #009900; }
+.syntax-KEYWORD2 { color: #000066; font-weight: bold; }
+.syntax-KEYWORD3 { color: #990000; }
+.syntax-KEYWORD4 { color: #0099cc; font-weight: bold; }
+.syntax-LABEL { color: #000000; font-style: italic; }
+.syntax-LITERAL1 { color: #000099; }
+.syntax-LITERAL2 { color: #cc0099; }
+.syntax-LITERAL3 { color: #9900cc; }
+.syntax-LITERAL4 { color: #6600cc; }
+.syntax-MARKUP { color: #009999; font-weight: bold; }
+.syntax-OPERATOR { color: #ff0000; }
+
+</style>
+</head>
+<body><div id="wrapper"><div id="content">
+
+<p class="legal">Copyright &copy; 2012, Ruby Willow, Inc. All rights reserved.<br /><br />
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:<br /><br />
+Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.<br /><br />
+Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.<br /><br />
+Neither the name of Ruby Willow, Inc. nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.<br /><br />
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+</p>
+
+<h1>PLJSON Library</h1>
+
+<p>The PLJSON library is a unit that allows you to do three things:</p>
+
+<ul>
+<li>Parse a JSON document into a SQL Object tree for easy traversal</li>
+<li>Create a SQL Object tree to make a corresponding JSON document.</li>
+<li>Create a JSON document in a couple of formats from a ref-cursor. This library supports Object Types, Nested Tables, nested cursors, and ANYDATA data.</li>
+</ul>
+
+<p>This library is divided into three layers:</p>
+
+<ul>
+<li>A set of SQL Objects and PL/SQL that you can see and have access to.</li>
+<li>The <a href="http://code.google.com/p/google-gson/" target="_blank">GSON library</a> which is the underlying engine.</li>
+<li>The Java "glue" that translates between PL/SQL and GSON.</li>
+</ul>
+
+<h2>Part 1 - Dealing with JSON in SQL</h2>
+
+<p>JSON defines a few particulars (go <a href="http://json.org/" target="_blank">here</a> for details):</p>
+
+<ul>
+<li>Value: This can be a primitive type (string, number, Boolean), an Object, an Array, or a NULL. A string is identified by surrounding double-quotes. A number does not have quotes and may be scientific-notated. Boolean is either the literal true or false. A NULL uses the literal null.</li>
+<li>Object: this is a collection of one or more "name":value pairs (herein referred to as tuple in this document). The value could be a primitive type, a NULL value, an Array, or another Object. The name must be a string type. An Object is denoted by an opening and closing brace: "{" and "}". Each tuple is separated by a comma.</li>
+<li>Array: this is an ordered list of zero or more values. The value could a primitive type, a NULL value, another Array, or an Object. An Array is denoted by an opening and closing bracket: "[" and "]". Each item in the array is separated by a comma. The values need not be the same type for each element in the array.</li>
+<li>Strings have certain escape sequences, but you need not worry about that; the GSON library takes care of translating these for you.</li>
+</ul>
+
+<p>JavaScript is a weakly typed and fully dynamic language, and that concept is diametrically opposed to the nature of SQL Objects and the PL/SQL language. This makes the translation to/from the two languages somewhat difficult. The attempt of this library was to make this as graceful as possible, but there are a couple of items to keep in mind.</p>
+<ul>
+<li>Do not instantiate the PLJSON objects using normal constructors. Instead, use the PLJSON package functions "createXxxx". This is partly because of the following point:</li>
+<li>Do not attempt to use or modify the "~" attribute of the <span class="monospc">pljsonElement</span> type. It is intended to be private/abstract, but SQL Types must have at least one public attribute, even if they are abstract. This attribute is used internally in the Java layer of this library, so modifying it will create problems for you.</li>
+</ul>
+
+<h2>Part 2 - The SQL Types</h2>
+
+<p>The SQL Types are defined as follows:</p>
+
+<h3>PLJSONELEMENT (<span class="monospc">pljsonElement</span>)</h3>
+
+<p>This is the root type for all JSON objects that can be instantiated. It has one attribute that should not be referenced by your code, and therefore has that unusual attribute name. This type is abstract and cannot be instantiated.</p>
+
+<span class="monospc">pljsonElement</span> has a number of member methods:
+
+<pre><span class="syntax0">  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">function</span> isObject    <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">boolean</span>,
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">function</span> isArray     <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">boolean</span>,
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">function</span> isPrimitive <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">boolean</span>,
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">function</span> isNull      <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">boolean</span>,
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">function</span> isString    <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">boolean</span>,
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">function</span> isNumber    <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">boolean</span>,
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">function</span> isBoolean   <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">boolean</span>,
+
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">function</span> getString   <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">varchar2</span>,
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">function</span> getNumber   <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">number</span>,
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">function</span> getBoolean  <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">boolean</span>
+</span></pre>
+
+<p>Note that <span class="monospc">getString</span>, <span class="monospc">getNumber</span>, and <span class="monospc">getBoolean</span> are considered convenience methods and will return "best-effort"
+for primitive types. <span class="monospc">getString</span> will return a string-ified value for a number, and for Boolean, the character "*" (asterisk/star) for a true value and a "&nbsp;" (space)
+for a false value. If a type can't be readily translated, NULL is returned. For example, a call to <span class="monospc">getNumber</span> for a Boolean type will return NULL.</p>
+
+
+<h3>PLJSONOBJECT (<span class="monospc">pljsonObject</span>)</h3>
+<p>Subtype of <span class="monospc">pljsonElement</span>. This is the most complex of the types. It is defined as follows:</p>
+
+<pre><span class="syntax0">  tuple  pljsonObjectEntries,
+
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">function</span> getIndex
+    <span class="syntax-OPERATOR">(</span> aName  <span class="syntax-KEYWORD1">in</span> <span class="syntax-KEYWORD1">varchar2</span> <span class="syntax-OPERATOR">)</span>
+    <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">binary_integer</span>,
+
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">function</span> getMember
+    <span class="syntax-OPERATOR">(</span> aName  <span class="syntax-KEYWORD1">in</span>  <span class="syntax-KEYWORD1">varchar2</span> <span class="syntax-OPERATOR">)</span>
+    <span class="syntax-KEYWORD1">return</span> pljsonElement,
+
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">procedure</span> addMember
+    <span class="syntax-OPERATOR">(</span> aName  <span class="syntax-KEYWORD1">in</span>  <span class="syntax-KEYWORD1">varchar2</span>,
+      <span class="syntax-KEYWORD1">element</span> <span class="syntax-KEYWORD1">in</span> pljsonElement <span class="syntax-OPERATOR">)</span>,
+
+  <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">convenience</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">methods</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">to</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">quickly</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">add</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">primitives</span>
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">procedure</span> addMember
+    <span class="syntax-OPERATOR">(</span> aName   <span class="syntax-KEYWORD1">in</span>  <span class="syntax-KEYWORD1">varchar2</span>,
+      <span class="syntax-KEYWORD1">element</span> <span class="syntax-KEYWORD1">in</span>  <span class="syntax-KEYWORD1">varchar2</span> <span class="syntax-OPERATOR">)</span>,
+
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">procedure</span> addMember
+    <span class="syntax-OPERATOR">(</span> aName   <span class="syntax-KEYWORD1">in</span>  <span class="syntax-KEYWORD1">varchar2</span>,
+      <span class="syntax-KEYWORD1">element</span> <span class="syntax-KEYWORD1">in</span>  <span class="syntax-KEYWORD1">number</span> <span class="syntax-OPERATOR">)</span>,
+
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">procedure</span> addMember
+    <span class="syntax-OPERATOR">(</span> aName   <span class="syntax-KEYWORD1">in</span>  <span class="syntax-KEYWORD1">varchar2</span>,
+      <span class="syntax-KEYWORD1">element</span> <span class="syntax-KEYWORD1">in</span>  <span class="syntax-KEYWORD1">boolean</span> <span class="syntax-OPERATOR">)</span>
+</span></pre>
+
+<p>Using <strong>tuple</strong> is the best way to represent a dynamic list of members, and it is a nested table <span class="monospc">pljsonObjectEntries</span>, which is a table of <span class="monospc">pljsonObjectEntry</span>, which is defined as:</p>
+
+<pre><span class="syntax0">  <span class="syntax-KEYWORD1">name</span>    <span class="syntax-KEYWORD1">varchar2</span><span class="syntax-OPERATOR">(</span><span class="syntax-DIGIT">4000</span><span class="syntax-OPERATOR">)</span>,
+  <span class="syntax-KEYWORD2">value</span>   pljsonElement
+</span></pre>
+
+<p>In general, you shouldn't need to access the tuple directly, but you can if you like. You can treat it like any other nested table object. If you want to iterate through the table, be aware that it could be "sparse" and so you want to use the appropriate <a href="http://docs.oracle.com/cd/E11882_01/appdev.112/e25519/composites.htm#BEIBJDBF" target="_blank">iteration method</a>.</p>
+
+<p>The one method that you don't see is "<span class="monospc">removeMember</span>". This is because of a particular limitation of PL/SQL reassigning the tuple back to itself inside the object. But you can delete out of the tuple as follows:</p>
+
+<pre>  obj.tuple.delete(obj.getIndex('memberName'));</pre>
+
+<p>Where <span class="monospc">obj</span> is your object variable. Hopefully you won't need to do this much.</p>
+
+<p><span class="monospc">getIndex</span> returns the index offset of the named entry. If the entry doesn't exist, NULL is returned.</p>
+<p><span class="monospc">getMember</span> returns the <span class="monospc">pljsonElement</span> of the named entry. If the entry doesn't exist, NULL is returned.</p>
+<p><span class="monospc">addMember</span> adds a <span class="monospc">pljsonElement</span> to the entries. If the named entry already exists, it is overwritten.</p>
+
+<p>The convenience methods create the correct primitive type to be used in the tuple.</p>
+
+
+<h3>PLJSONARRAY (<span class="monospc">pljsonArray</span>)</h3>
+<p>Subtype of <span class="monospc">pljsonElement</span>. This represents a JSON array, and is defined as follows:</p>
+
+<pre><span class="syntax0">  elements  pljsonElements,
+
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">procedure</span> addElement
+    <span class="syntax-OPERATOR">(</span> <span class="syntax-KEYWORD1">element</span> <span class="syntax-KEYWORD1">in</span> pljsonElement <span class="syntax-OPERATOR">)</span>,
+
+  <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">convenience</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">methods</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">to</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">quickly</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">add</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">primitives</span>
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">procedure</span> addElement
+    <span class="syntax-OPERATOR">(</span> <span class="syntax-KEYWORD1">element</span> <span class="syntax-KEYWORD1">in</span>  <span class="syntax-KEYWORD1">varchar2</span> <span class="syntax-OPERATOR">)</span>,
+
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">procedure</span> addElement
+    <span class="syntax-OPERATOR">(</span> <span class="syntax-KEYWORD1">element</span> <span class="syntax-KEYWORD1">in</span>  <span class="syntax-KEYWORD1">number</span> <span class="syntax-OPERATOR">)</span>,
+
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">procedure</span> addElement
+    <span class="syntax-OPERATOR">(</span> <span class="syntax-KEYWORD1">element</span> <span class="syntax-KEYWORD1">in</span>  <span class="syntax-KEYWORD1">boolean</span> <span class="syntax-OPERATOR">)</span>
+</span></pre>
+
+<p>The elements in this object is a <span class="monospc">pljsonElements</span> which is simply a table of <span class="monospc">pljsonElement</span>. Like <span class="monospc">pljsonObject</span>, you can iterate through elements using the proper technique. As well, to delete from elements, use the same method described above.</p>
+
+<p>The convenience methods create the correct primitive type to be used.</p>
+
+<h3>PLJSONPRIMITIVE (<span class="monospc">pljsonPrimitive</span>)</h3>
+
+<p>Subtype of <span class="monospc">pljsonElement</span>. This is simply the base type of the four primitive types.  It is not instantiable (that is, it's abstract), has no additional methods, and is typically never referenced in your code. It is here simply to provide structure.</p>
+
+<h3>PLJSONNULL (<span class="monospc">pljsonNull</span>)</h3>
+<p>Subtype of <span class="monospc">pljsonPrimitive</span>. This is the most reasonable way to represent that a particular JSON value is actually NULL. It has no additional attributes or methods.</p>
+
+<h3>PLJSONSTRING (<span class="monospc">pljsonString</span>)</h3>
+<p>Subtype of <span class="monospc">pljsonPrimitive</span>.  It has one additional attribute:</p>
+
+<pre><span class="syntax0">  <span class="syntax-KEYWORD2">value</span>    <span class="syntax-KEYWORD1">varchar2</span><span class="syntax-OPERATOR">(</span><span class="syntax-DIGIT">32000</span> <span class="syntax-KEYWORD1">char</span><span class="syntax-OPERATOR">)</span>
+</span></pre>
+
+<p>Note that strings stored here will be properly escaped when serialized in JSON output. When a JSON document creates this object, the string is restored "un-escaped".</p>
+
+<h3>PLJSONNUMBER (<span class="monospc">pljsonNumber</span>)</h3>
+<p>Subtype of <span class="monospc">pljsonPrimitive</span>.  It has one additional attribute:</p>
+
+<pre><span class="syntax0">  <span class="syntax-KEYWORD2">value</span>    <span class="syntax-KEYWORD1">number</span>
+</span></pre>
+
+<p>When serialized in JSON output, the number will always be represented in non-scientific notation.</p>
+
+<h3>PLJSONBOOLEAN (<span class="monospc">pljsonBoolean</span>)</h3>
+
+<p>Subtype of <span class="monospc">pljsonPrimitive</span>.  It has one additional attribute and one method:<p>
+
+<pre><span class="syntax0">  val    <span class="syntax-KEYWORD1">varchar2</span><span class="syntax-OPERATOR">(</span><span class="syntax-DIGIT">1</span><span class="syntax-OPERATOR">)</span>,    <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">anything</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">other</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">than</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">'*'</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">is</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">false</span>
+
+  <span class="syntax-KEYWORD1">member</span> <span class="syntax-KEYWORD1">function</span> <span class="syntax-KEYWORD2">value</span>
+    <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">boolean</span>       <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">but</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">use</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">this</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">function</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">to</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">be</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">sure</span>
+</span></pre>
+
+<p>You should use the <span class="monospc">value</span> method in your code, or use the <span class="monospc">getBoolean</span> method from <span class="monospc">pljsonElement</span>. When serialized in JSON output, this primitive is properly converted to use the words <strong>true</strong> and <strong>false</strong> appropriately in the document.</p>
+
+<h2>Part 3 - The PLJSON Package</h2>
+
+<p>This package is quite simple.</p>
+<ul>
+<li>First, it implements the three main tasks mentioned at the beginning of this document.</li>
+<li>Second, it has the "constructors" for the objects you may need to create.</li>
+<li>Third, it has conversion tools to allow you to convert one object type to another.</li>
+</ul>
+
+<p>The three main tasks:</p>
+
+<pre><span class="syntax0">  <span class="syntax-KEYWORD1">function</span> parseJson
+    <span class="syntax-OPERATOR">(</span> json  <span class="syntax-KEYWORD1">in</span>  <span class="syntax-KEYWORD1">CLOB</span> <span class="syntax-OPERATOR">)</span>
+    <span class="syntax-KEYWORD1">return</span> pljsonElement;
+</span></pre>
+
+<p>This function takes a JSON document and returns the root element. The element could either be an object or an array. This is the slowest operation you will encounter, especially for large documents, since the document must be parsed, translated into the GSON object tree, then translated into a SQL object tree. Some databases appear to work better than others, but it hasn't been determined what makes them better or worse.</p>
+
+<pre><span class="syntax0">  <span class="syntax-KEYWORD1">function</span> makeJson
+    <span class="syntax-OPERATOR">(</span> pljson <span class="syntax-KEYWORD1">in</span> pljsonElement,
+      pretty <span class="syntax-KEYWORD1">in</span> <span class="syntax-KEYWORD1">boolean</span> <span class="syntax-KEYWORD1">default</span> <span class="syntax-KEYWORD1">false</span> <span class="syntax-OPERATOR">)</span>
+    <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">CLOB</span>;
+</span></pre>
+
+<p>This function takes a root element (an object or an array) and returns a JSON document. Specify pretty to get the output in a more human-readable format. The returned CLOB is session-temporary, and you should free it using <span class="monospc">dbms_lob.freeTemporary(...);</span> to avoid any TEMP tablespace issues.</p>
+
+<pre><span class="syntax0">  <span class="syntax-KEYWORD1">function</span> refCursorToJson
+    <span class="syntax-OPERATOR">(</span> input    <span class="syntax-KEYWORD1">in</span> sys_refcursor,
+      compact  <span class="syntax-KEYWORD1">in</span> <span class="syntax-KEYWORD1">boolean</span>  <span class="syntax-KEYWORD1">default</span> <span class="syntax-KEYWORD1">false</span>,
+      rootName <span class="syntax-KEYWORD1">in</span> <span class="syntax-KEYWORD1">varchar2</span> <span class="syntax-KEYWORD1">default</span> <span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">json</span><span class="syntax-LITERAL1">'</span>,
+      pretty   <span class="syntax-KEYWORD1">in</span> <span class="syntax-KEYWORD1">boolean</span>  <span class="syntax-KEYWORD1">default</span> <span class="syntax-KEYWORD1">false</span>,
+      dateFmt  <span class="syntax-KEYWORD1">in</span> <span class="syntax-KEYWORD1">varchar2</span> <span class="syntax-KEYWORD1">default</span> <span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">yyyy-MM-dd</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">HH:mm:ss</span><span class="syntax-LITERAL1">'</span> <span class="syntax-OPERATOR">)</span>
+    <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">CLOB</span>;
+</span></pre>
+
+<p>This function processes an open ref-cursor and turns it into a JSON document. This process is done entirely in Java, and bypasses the PL/SQL object creation mechanism, so it is quite fast. This uses the GSON serializer directly to the result CLOB, so large datasets should not be an issue. The returned CLOB is session-temporary, and you should free it using <span class="monospc">dbms_lob.freeTemporary(...);</span> to avoid any TEMP tablespace issues.</p>
+
+<p>The JSON document that is returned always starts with an object with one member, specified by <span class="monospc">rootName</span>. That member is always an array.</p>
+
+<pre>{"json":[...]}</pre>
+
+<p>From there, you have a choice of formats: Normal, and Compact. The normal format returns an array of objects. Each object is one row of the cursor. Each object contains all of the field values of the row. If a column is NULL, the JSON object will be serialized as NULL.</p>
+
+<p>Given the following query:</p>
+
+<pre><span class="syntax0"><span class="syntax-KEYWORD1">select</span> <span class="syntax-KEYWORD2">cast</span><span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD3">dbms_random</span>.<span class="syntax-KEYWORD1">string</span><span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">a</span><span class="syntax-LITERAL1">'</span>,<span class="syntax-DIGIT">12</span><span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">as</span> <span class="syntax-KEYWORD1">varchar2</span><span class="syntax-OPERATOR">(</span><span class="syntax-DIGIT">30</span><span class="syntax-OPERATOR">)</span><span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">as</span> <span class="syntax-LITERAL2">&quot;</span><span class="syntax-LITERAL2">varChar2</span><span class="syntax-LITERAL2">&quot;</span>,
+       <span class="syntax-KEYWORD2">round</span><span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD2">cast</span><span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD3">dbms_random</span>.<span class="syntax-KEYWORD2">value</span><span class="syntax-OPERATOR">(</span><span class="syntax-DIGIT">1</span>, <span class="syntax-DIGIT">100000</span><span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">as</span> <span class="syntax-KEYWORD1">number</span><span class="syntax-OPERATOR">)</span>, <span class="syntax-DIGIT">7</span><span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">as</span> num,
+       <span class="syntax-KEYWORD2">cast</span><span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD2">sysdate</span><span class="syntax-OPERATOR">+</span><span class="syntax-KEYWORD3">dbms_random</span>.<span class="syntax-KEYWORD2">value</span><span class="syntax-OPERATOR">(</span><span class="syntax-OPERATOR">-</span><span class="syntax-DIGIT">1000</span>, <span class="syntax-DIGIT">1000</span><span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">as</span> <span class="syntax-KEYWORD1">date</span><span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">as</span> dt
+  <span class="syntax-KEYWORD1">from</span> dual <span class="syntax-KEYWORD1">connect</span> <span class="syntax-KEYWORD1">by</span> <span class="syntax-KEYWORD1">level</span> <span class="syntax-OPERATOR">&lt;</span> <span class="syntax-DIGIT">5</span>
+</span></pre>
+
+<p>We get the JSON document as follows:</p>
+
+<pre>{ "json": [
+    { "varChar2": "xEPnPeRCmuOv",
+      "NUM": 21349.6088119,
+      "DT": "2010-07-21 02:58:16" },
+    { "varChar2": "JQrGaYJlgvbm",
+      "NUM": 49904.2727362,
+      "DT": "2013-09-11 06:02:49" },
+    { "varChar2": "SXijRbUUMghW",
+      "NUM": 40663.8263266,
+      "DT": "2015-01-10 07:05:42" },
+    { "varChar2": "hXOvoqnZGAMz",
+      "NUM": 97087.044715,
+      "DT": "2012-08-14 13:33:33" }
+  ]
+}</pre>
+
+<p>A few things to note: If you specify a case-sensitive label (x AS "something"), the object attribute will reflect that. See how "varChar2" is labeled. Also note, that dates are serialized as strings based on the <span class="monospc">dateFmt</span>. <span class="monospc">dateFmt</span> is a Java <span class="monospc">SimpleDateFormat</span> format string. Refer to the Java documentation for the elements in the format string.</p>
+
+<p>Specifying compact returns the data in a slightly more compact fashion:</p>
+
+<pre>{ "json": [
+    [ "varChar2", "NUM", "DT" ],
+    [ "GDRXvWZmQahh", 81298.3390885, "2013-01-21 11:40:43" ],
+    [ "qefRYoMzzHwu", 76503.384392, "2014-08-25 10:29:59" ],
+    [ "rsEflMMgFiPe", 69963.8523149, "2012-10-29 03:03:20" ],
+    [ "hmLJmYyhzhra", 36927.5054318, "2010-04-21 11:18:28" ]
+  ]
+}</pre>
+
+<p>This results in an array of arrays, where the first array contains the column labels, and the subsequent arrays contain the column data.</p>
+
+<p>As noted at the beginning of this document, objects, nested tables, and nested cursors are supported. Given the following query:</p>
+
+<pre><span class="syntax0"><span class="syntax-KEYWORD1">select</span> <span class="syntax-KEYWORD2">cast</span><span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD3">dbms_random</span>.<span class="syntax-KEYWORD1">string</span><span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">a</span><span class="syntax-LITERAL1">'</span>,<span class="syntax-DIGIT">12</span><span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">as</span> <span class="syntax-KEYWORD1">varchar2</span><span class="syntax-OPERATOR">(</span><span class="syntax-DIGIT">30</span><span class="syntax-OPERATOR">)</span><span class="syntax-OPERATOR">)</span> <span class="syntax-LITERAL2">&quot;</span><span class="syntax-LITERAL2">varChar2</span><span class="syntax-LITERAL2">&quot;</span>,
+       <span class="syntax-KEYWORD2">round</span><span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD2">cast</span><span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD3">dbms_random</span>.<span class="syntax-KEYWORD2">value</span><span class="syntax-OPERATOR">(</span><span class="syntax-DIGIT">1</span>, <span class="syntax-DIGIT">100000</span><span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">as</span> <span class="syntax-KEYWORD1">number</span><span class="syntax-OPERATOR">)</span>, <span class="syntax-DIGIT">7</span><span class="syntax-OPERATOR">)</span> num,
+       <span class="syntax-KEYWORD1">cursor</span><span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD1">select</span> <span class="syntax-KEYWORD2">cast</span><span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD3">dbms_random</span>.<span class="syntax-KEYWORD1">string</span><span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">a</span><span class="syntax-LITERAL1">'</span>,<span class="syntax-DIGIT">10</span><span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">as</span> <span class="syntax-KEYWORD1">varchar2</span><span class="syntax-OPERATOR">(</span><span class="syntax-DIGIT">10</span><span class="syntax-OPERATOR">)</span><span class="syntax-OPERATOR">)</span> <span class="syntax-LITERAL2">&quot;</span><span class="syntax-LITERAL2">subField1</span><span class="syntax-LITERAL2">&quot;</span>,
+                     <span class="syntax-KEYWORD2">round</span><span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD3">dbms_random</span>.<span class="syntax-KEYWORD2">value</span><span class="syntax-OPERATOR">(</span><span class="syntax-DIGIT">1</span>, <span class="syntax-DIGIT">100000000000</span><span class="syntax-OPERATOR">)</span>, <span class="syntax-DIGIT">4</span><span class="syntax-OPERATOR">)</span> <span class="syntax-LITERAL2">&quot;</span><span class="syntax-LITERAL2">subNumber2</span><span class="syntax-LITERAL2">&quot;</span>
+                <span class="syntax-KEYWORD1">from</span> dual <span class="syntax-KEYWORD1">connect</span> <span class="syntax-KEYWORD1">by</span> <span class="syntax-KEYWORD1">level</span> <span class="syntax-OPERATOR">&lt;</span> <span class="syntax-DIGIT">4</span><span class="syntax-OPERATOR">)</span> crsr
+  <span class="syntax-KEYWORD1">from</span> dual <span class="syntax-KEYWORD1">connect</span> <span class="syntax-KEYWORD1">by</span> <span class="syntax-KEYWORD1">level</span> <span class="syntax-OPERATOR">&lt;</span> <span class="syntax-DIGIT">5</span>
+</span></pre>
+
+<p>The normal JSON looks like:</p>
+
+<pre>{ "json": [
+    { "varChar2": "UjfDosEGMNBm",
+      "NUM": 93428.8585544,
+      "CRSR": [
+        { "subField1": "XnDcBzoHLp",
+          "subNumber2": 35653935772.037 },
+        { "subField1": "DQOQOlKxhv",
+          "subNumber2": 91540154112.4731 },
+        { "subField1": "vMMppIKxrx",
+          "subNumber2": 22582327522.4681 }
+      ]
+    },
+    { "varChar2": "GbYeoKgowuDH",
+      "NUM": 48212.818676,
+      "CRSR": [
+        { "subField1": "kMNkiqZGiJ",
+          "subNumber2": 75010070169.8976 },
+        { "subField1": "yevTKNgdGv",
+          "subNumber2": 74665741685.6596 },
+        { "subField1": "kdslLwfFXZ",
+          "subNumber2": 59021183992.4713 }
+      ]
+    },
+    { "varChar2": "FXqxLFudaHtF",
+      "NUM": 13884.848568,
+      "CRSR": [
+        { "subField1": "QAwGorsHUt",
+          "subNumber2": 49869676584.8504 },
+        { "subField1": "rfWDVlRtdi",
+          "subNumber2": 79279821361.3168 },
+        { "subField1": "dxZhNvxgNa",
+          "subNumber2": 75694323505.735 }
+      ]
+    },
+    { "varChar2": "NLtnDNPYaXHt",
+      "NUM": 15641.151077,
+      "CRSR": [
+        { "subField1": "ulkLDVBWgm",
+          "subNumber2": 35259647752.7328 },
+        { "subField1": "HgOXdqJnMD",
+          "subNumber2": 54007481353.2732 },
+        { "subField1": "phKClYGiHo",
+          "subNumber2": 21291801388.0795 }
+      ]
+    }
+  ]
+}</pre>
+
+<p>And the compact JSON looks like:</p>
+
+<pre>{ "json": [
+    [ "varChar2", "NUM", "CRSR" ],
+    [ "AXTRVAPeSvEb", 43237.6318831,
+      [ [ "subField1", "subNumber2" ],
+        [ "ElfrRjwTgh", 90999917723.145 ],
+        [ "OCHDtvWXdG", 63444436634.8586 ],
+        [ "FNNwfrESep", 2308724396.9671 ]
+      ]
+    ],
+    [ "gwJZgItHYbsD", 30981.9794112,
+      [ [ "subField1", "subNumber2" ],
+        [ "hwzeZKMdSx", 133901885.8896 ],
+        [ "gPFBAFWKTO", 18405286462.1886 ],
+        [ "ShKjVCaIhO", 83805533569.5954 ]
+      ]
+    ],
+    [ "ZnlLyWTBBABy", 84937.3157598,
+      [ [ "subField1", "subNumber2" ],
+        [ "OhhOGYpVdm", 93433700854.0266 ],
+        [ "LOOBBBYhnI", 67318870030.6331 ],
+        [ "rfVgATtrKM", 64340538077.558 ]
+      ]
+    ],
+    [ "AHHnAvixMTaX", 46866.7575258,
+      [ [ "subField1", "subNumber2" ],
+        [ "NeMZpazxQZ", 45895664191.2099 ],
+        [ "gjMktjORQG", 43920800115.6553 ],
+        [ "jOhiAQzhKA", 51185780635.0626 ]
+      ]
+    ]
+  ]
+}</pre>
+
+<p>We will leave it as an exercise to the reader to try objects and nested tables. However, since objects and nested tables cannot easily be "compacted", they are always presented as "normal".</p>
+
+<p>Lastly, we have constructors and converters:</p>
+
+<p>Constructors:</p>
+
+<pre><span class="syntax0">  <span class="syntax-KEYWORD1">function</span> createObject    <span class="syntax-KEYWORD1">return</span> pljsonObject;
+  <span class="syntax-KEYWORD1">function</span> createArray     <span class="syntax-KEYWORD1">return</span> pljsonArray;
+  <span class="syntax-KEYWORD1">function</span> createNull      <span class="syntax-KEYWORD1">return</span> pljsonNull;
+
+  <span class="syntax-KEYWORD1">function</span> createString  <span class="syntax-OPERATOR">(</span> val <span class="syntax-KEYWORD1">in</span> <span class="syntax-KEYWORD1">varchar2</span> <span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">return</span> pljsonString;
+  <span class="syntax-KEYWORD1">function</span> createNumber  <span class="syntax-OPERATOR">(</span> val <span class="syntax-KEYWORD1">in</span> <span class="syntax-KEYWORD1">number</span> <span class="syntax-OPERATOR">)</span>   <span class="syntax-KEYWORD1">return</span> pljsonNumber;
+  <span class="syntax-KEYWORD1">function</span> createBoolean <span class="syntax-OPERATOR">(</span> val <span class="syntax-KEYWORD1">in</span> <span class="syntax-KEYWORD1">boolean</span> <span class="syntax-OPERATOR">)</span>  <span class="syntax-KEYWORD1">return</span> pljsonBoolean;
+</span></pre>
+
+<p>These should be self-explanitory. In general, you should not change the value of a primitive after it has been created. Instead, simply construct a new primitive.</p>
+
+<p>After creating an Object or an Array, you add members to the object, and add elements to the array using the member methods.</p>
+
+<p>Converters:</p>
+
+<pre><span class="syntax0">  <span class="syntax-KEYWORD1">function</span> getObject  <span class="syntax-OPERATOR">(</span> e  <span class="syntax-KEYWORD1">in</span> pljsonElement <span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">return</span> pljsonObject;
+  <span class="syntax-KEYWORD1">function</span> getArray   <span class="syntax-OPERATOR">(</span> e  <span class="syntax-KEYWORD1">in</span> pljsonElement <span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">return</span> pljsonArray;
+  <span class="syntax-KEYWORD1">function</span> getString  <span class="syntax-OPERATOR">(</span> e  <span class="syntax-KEYWORD1">in</span> pljsonElement <span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">varchar2</span>;
+  <span class="syntax-KEYWORD1">function</span> getNumber  <span class="syntax-OPERATOR">(</span> e  <span class="syntax-KEYWORD1">in</span> pljsonElement <span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">number</span>;
+  <span class="syntax-KEYWORD1">function</span> getBoolean <span class="syntax-OPERATOR">(</span> e  <span class="syntax-KEYWORD1">in</span> pljsonElement <span class="syntax-OPERATOR">)</span> <span class="syntax-KEYWORD1">return</span> <span class="syntax-KEYWORD1">boolean</span>;
+</span></pre>
+
+<p>These also should be self-explanatory. Note that if you pass an invalid type to a converter, an exception will be thrown.</p>
+
+<h2>Part 4: Example Code</h2>
+
+<p>The following complete script can be run in SQL*Plus. Copy it into a text file and run it in a database that has PLJSON installed. Notice on the Object and Array demos that you can select from the items (tuple or elements). Or in the last example, you can programmatically look for a particular item.</p>
+
+<pre><span class="syntax0">column <span class="syntax-KEYWORD1">name</span> format a40
+column val format a60
+var rc refcursor
+var clb  <span class="syntax-KEYWORD1">clob</span>
+<span class="syntax-KEYWORD2">set</span> head off
+
+<span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">demonstrate</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">an</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">object</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">with</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">a</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">bunch</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">of</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">string</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">members</span>
+<span class="syntax-KEYWORD1">declare</span>
+  <span class="syntax-KEYWORD1">object</span>    pljsonObject;
+<span class="syntax-KEYWORD1">begin</span>
+
+  <span class="syntax-KEYWORD1">object</span> <span class="syntax-OPERATOR">:=</span> pljson.createObject<span class="syntax-OPERATOR">(</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">object</span>.addMember<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">aaa</span><span class="syntax-LITERAL1">'</span>, <span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">this</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">is</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">a</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">test</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">object</span>.addMember<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">bbb</span><span class="syntax-LITERAL1">'</span>, <span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">of</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">the</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">emergency</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">broadcast</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">system</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">object</span>.addMember<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">ccc</span><span class="syntax-LITERAL1">'</span>, <span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">this</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">is</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">only</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">a</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">test</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">object</span>.addMember<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">ggg</span><span class="syntax-LITERAL1">'</span>, <span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">if</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">this</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">were</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">an</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">actual</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">emergency</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">object</span>.addMember<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">fff</span><span class="syntax-LITERAL1">'</span>, <span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">you</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">would</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">have</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">been</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">instructed</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">object</span>.addMember<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">zzz</span><span class="syntax-LITERAL1">'</span>, <span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">this</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">shouldn</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">t</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">be</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">here</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">object</span>.addMember<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">eee</span><span class="syntax-LITERAL1">'</span>, <span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">to</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">put</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">your</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">head</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">between</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">your</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">knees</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">object</span>.addMember<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">ddd</span><span class="syntax-LITERAL1">'</span>, <span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">and</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">kiss</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">your</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">a**</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">goodbye</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+
+  <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">deletes</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">have</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">to</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">go</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">like</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">this</span>
+  <span class="syntax-KEYWORD1">object</span>.tuple.<span class="syntax-KEYWORD1">delete</span><span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD1">object</span>.getIndex<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">zzz</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span><span class="syntax-OPERATOR">)</span>;
+
+  <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">select</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">member</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">data</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">from</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">the</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">object</span>
+  <span class="syntax-KEYWORD1">open</span> :rc <span class="syntax-KEYWORD1">for</span> <span class="syntax-KEYWORD1">select</span> p.<span class="syntax-KEYWORD2">value</span>.getString<span class="syntax-OPERATOR">(</span><span class="syntax-OPERATOR">)</span> val
+               <span class="syntax-KEYWORD1">from</span> <span class="syntax-KEYWORD1">table</span><span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD1">object</span>.tuple<span class="syntax-OPERATOR">)</span> p
+               <span class="syntax-KEYWORD1">where</span> p.<span class="syntax-KEYWORD1">name</span> <span class="syntax-KEYWORD1">in</span> <span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">ggg</span><span class="syntax-LITERAL1">'</span>,<span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">aaa</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+
+  <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">make</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">the</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">JSON</span>
+  :clb <span class="syntax-OPERATOR">:=</span> pljson.makeJson<span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD1">object</span>, <span class="syntax-KEYWORD1">true</span><span class="syntax-OPERATOR">)</span>;
+
+<span class="syntax-KEYWORD1">end</span>;
+<span class="syntax-OPERATOR">/</span>
+
+print rc
+
+<span class="syntax-KEYWORD1">select</span> :clb <span class="syntax-KEYWORD1">from</span> dual;
+
+
+<span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">demonstrate</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">an</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">array</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">of</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">string</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">elements</span>
+<span class="syntax-KEYWORD1">declare</span>
+  <span class="syntax-KEYWORD1">vArray</span> pljsonArray;
+<span class="syntax-KEYWORD1">begin</span>
+  <span class="syntax-KEYWORD1">vArray</span> <span class="syntax-OPERATOR">:=</span> pljson.createArray<span class="syntax-OPERATOR">(</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">vArray</span>.addElement<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">this</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">is</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">a</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">test</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">vArray</span>.addElement<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">of</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">the</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">emergency</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">broadcast</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">system</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">vArray</span>.addElement<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">this</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">is</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">only</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">a</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">test</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">vArray</span>.addElement<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">had</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">this</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">been</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">an</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">actual</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">emergency</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">vArray</span>.addElement<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">you</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">would</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">have</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">been</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">instructed</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">vArray</span>.addElement<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">to</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">put</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">your</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">head</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">between</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">your</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">knees</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">vArray</span>.addElement<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">and</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">kiss</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">your</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">a**</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">goodbye</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+
+  :clb <span class="syntax-OPERATOR">:=</span> pljson.makeJson<span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD1">vArray</span>, <span class="syntax-KEYWORD1">true</span><span class="syntax-OPERATOR">)</span>;
+
+  <span class="syntax-KEYWORD1">open</span> :rc <span class="syntax-KEYWORD1">for</span> <span class="syntax-KEYWORD1">select</span> <span class="syntax-KEYWORD2">value</span><span class="syntax-OPERATOR">(</span>p<span class="syntax-OPERATOR">)</span>.getString<span class="syntax-OPERATOR">(</span><span class="syntax-OPERATOR">)</span> val <span class="syntax-KEYWORD1">from</span> <span class="syntax-KEYWORD1">table</span><span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD1">vArray</span>.elements<span class="syntax-OPERATOR">)</span> p;
+
+<span class="syntax-KEYWORD1">end</span>;
+<span class="syntax-OPERATOR">/</span>
+
+print rc
+
+<span class="syntax-KEYWORD1">select</span> :clb <span class="syntax-KEYWORD1">from</span> dual;
+
+var json <span class="syntax-KEYWORD1">varchar2</span><span class="syntax-OPERATOR">(</span><span class="syntax-DIGIT">4000</span><span class="syntax-OPERATOR">)</span>
+<span class="syntax-KEYWORD1">begin</span>
+  :json <span class="syntax-OPERATOR">:=</span> <span class="syntax-LITERAL1">q'!</span>
+<span class="syntax-LITERAL1">{&quot;web-app&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">{&quot;servlet&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">[{&quot;servlet-name&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cofaxCDS&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;servlet-class&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;org.cofax.cds.CDSServlet&quot;,&quot;init-param&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">{</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;configGlossary:installationAt&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;Philadelphia,</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">PA&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;configGlossary:adminEmail&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;ksm@pobox.com&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;configGlossary:poweredBy&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;Cofax&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;configGlossary:poweredByIcon&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/images/cofax.gif&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;configGlossary:staticPath&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/content/static&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;templateProcessorClass&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;org.cofax.WysiwygTemplate&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;templateLoaderClass&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;org.cofax.FilesTemplateLoader&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;templatePath&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;templates&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;templateOverridePath&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;defaultListTemplate&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;listTemplate.htm&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;defaultFileTemplate&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;articleTemplate.htm&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;useJSP&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">false,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;jspListTemplate&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;listTemplate.jsp&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;jspFileTemplate&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;articleTemplate.jsp&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cachePackageTagsTrack&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">200,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cachePackageTagsStore&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">200,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cachePackageTagsRefresh&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">60,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cacheTemplatesTrack&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">100,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cacheTemplatesStore&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">50,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cacheTemplatesRefresh&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">15,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cachePagesTrack&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">200,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cachePagesStore&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">100,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cachePagesRefresh&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">10,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cachePagesDirtyRead&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">10,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;searchEngineListTemplate&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;forSearchEnginesList.htm&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;searchEngineFileTemplate&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;forSearchEngines.htm&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;searchEngineRobotsDb&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;WEB-INF/robots.db&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;useDataStore&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">true,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataStoreClass&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;org.cofax.SqlDataStore&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;redirectionClass&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;org.cofax.SqlRedirection&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataStoreName&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cofax&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataStoreDriver&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;com.microsoft.jdbc.sqlserver.SQLServerDriver&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataStoreUrl&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;jdbc:microsoft:sqlserver://LOCALHOST:1433;DatabaseName=goon&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataStoreUser&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;sa&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataStorePassword&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataStoreTestQuery&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataStoreTestQuery&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;SET</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">NOCOUNT</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">ON;select</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">test='test';&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataStoreLogFile&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/usr/local/tomcat/logs/datastore.log&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataStoreInitConns&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">10,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataStoreMaxConns&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">100,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataStoreConnUsageLimit&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">100,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataStoreLogLevel&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;debug&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;maxUrlLength&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">500}},{&quot;servlet-name&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cofaxEmail&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;servlet-class&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;org.cofax.cds.EmailServlet&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;init-param&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">{&quot;mailHost&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;mail1&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;mailHostOverride&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;mail2&quot;}},{&quot;servlet-name&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cofaxAdmin&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;servlet-class&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;org.cofax.cds.AdminServlet&quot;},{&quot;servlet-name&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;fileServlet&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;servlet-class&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;org.cofax.cds.FileServlet&quot;},</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">{</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;servlet-name&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cofaxTools&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;servlet-class&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;org.cofax.cms.CofaxToolsServlet&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;init-param&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">{</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;templatePath&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;toolstemplates/&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;log&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">1,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;logLocation&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/usr/local/tomcat/logs/CofaxTools.log&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;logMaxSize&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataLog&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">1,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataLogLocation&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/usr/local/tomcat/logs/dataLog.log&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;dataLogMaxSize&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;removePageCache&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/content/admin/remove?cache=pages&amp;id=&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;removeTemplateCache&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/content/admin/remove?cache=templates&amp;id=&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;fileTransferFolder&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/usr/local/tomcat/webapps/content/fileTransferFolder&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;lookInContext&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">1,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;adminGroupID&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">4,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;betaServer&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">true}}],</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;servlet-mapping&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">{</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cofaxCDS&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cofaxEmail&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/cofaxutil/aemail/*&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cofaxAdmin&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/admin/*&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;fileServlet&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/static/*&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cofaxTools&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/tools/*&quot;},</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;taglib&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">{</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;taglib-uri&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;cofax.tld&quot;,</span>
+<span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;taglib-location&quot;:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">&quot;/WEB-INF/tlds/cofax.tld&quot;}}}</span><span class="syntax-LITERAL1">!'</span>;
+<span class="syntax-KEYWORD1">end</span>;
+<span class="syntax-OPERATOR">/</span>
+
+<span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">demonstrate</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">parsing</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">and</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">traversing</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">a</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">JSON</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">tree</span>
+<span class="syntax-KEYWORD1">declare</span>
+  root   pljsonElement;
+
+  t1 <span class="syntax-KEYWORD1">timestamp</span>;
+  t2 <span class="syntax-KEYWORD1">timestamp</span>;
+
+  <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">forward</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">declarations</span>
+  <span class="syntax-KEYWORD1">procedure</span> processElement<span class="syntax-OPERATOR">(</span>e pljsonElement, lvl <span class="syntax-KEYWORD1">binary_integer</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">procedure</span> parseObject<span class="syntax-OPERATOR">(</span>o pljsonObject, lvl <span class="syntax-KEYWORD1">binary_integer</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">procedure</span> parseArray<span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD1">a</span> pljsonArray, lvl <span class="syntax-KEYWORD1">binary_integer</span><span class="syntax-OPERATOR">)</span>;
+
+  <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">helper</span>
+  <span class="syntax-KEYWORD1">procedure</span> doOutput <span class="syntax-OPERATOR">(</span>o <span class="syntax-KEYWORD1">varchar2</span>, lvl <span class="syntax-KEYWORD1">binary_integer</span><span class="syntax-OPERATOR">)</span>
+  <span class="syntax-KEYWORD1">is</span>
+  <span class="syntax-KEYWORD1">begin</span>
+    <span class="syntax-KEYWORD3">dbms_output</span>.put_line<span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD2">lpad</span><span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">||</span>o, <span class="syntax-KEYWORD2">length</span><span class="syntax-OPERATOR">(</span>o<span class="syntax-OPERATOR">)</span><span class="syntax-OPERATOR">+</span>lvl<span class="syntax-OPERATOR">+</span><span class="syntax-DIGIT">2</span>, <span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">-</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span><span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">end</span> doOutput;
+
+  <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">an</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">object</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">contains</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">a</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">&quot;tuple&quot;,</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">which</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">is</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">a</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">pljsonObjectEntries</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">nested</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">table</span>
+  <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">each</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">element</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">in</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">the</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">tuple</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">is</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">a</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">pljsonObjectEntry</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">object,</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">which</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">is</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">a</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">name/value</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">pair</span>
+  <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">the</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">name</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">is</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">a</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">string,</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">the</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">value</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">is</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">a</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">pljsonElement</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">object</span>
+  <span class="syntax-KEYWORD1">procedure</span> parseObject<span class="syntax-OPERATOR">(</span>o pljsonObject, lvl <span class="syntax-KEYWORD1">binary_integer</span><span class="syntax-OPERATOR">)</span>
+  <span class="syntax-KEYWORD1">is</span>
+    i   <span class="syntax-KEYWORD1">binary_integer</span>;
+    oe  pljsonObjectEntry;
+  <span class="syntax-KEYWORD1">begin</span>
+    doOutput<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">OBJECT</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">START</span><span class="syntax-LITERAL1">'</span>, lvl<span class="syntax-OPERATOR">)</span>;
+
+    <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">demonstrate</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">looking</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">for</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">a</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">particular</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">member</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">of</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">an</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">object</span>
+    <span class="syntax-KEYWORD1">declare</span>
+      v1  pljsonElement;
+    <span class="syntax-KEYWORD1">begin</span>
+      v1 <span class="syntax-OPERATOR">:=</span> o.getMember<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">jspFileTemplate</span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">)</span>;
+      <span class="syntax-KEYWORD1">if</span> v1 <span class="syntax-KEYWORD1">is</span> <span class="syntax-KEYWORD1">not</span> <span class="syntax-KEYWORD1">null</span> <span class="syntax-KEYWORD1">then</span>
+        <span class="syntax-KEYWORD3">dbms_output</span>.put_line<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">****</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">FOUND</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">IT</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">****</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">||</span>v1.getString<span class="syntax-OPERATOR">(</span><span class="syntax-OPERATOR">)</span><span class="syntax-OPERATOR">)</span>;
+      <span class="syntax-KEYWORD1">end</span> <span class="syntax-KEYWORD1">if</span>;
+    <span class="syntax-KEYWORD1">end</span>;
+
+    <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">demonstrate</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">traversing</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">the</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">members</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">of</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">an</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">object</span>
+    i <span class="syntax-OPERATOR">:=</span> o.tuple.<span class="syntax-KEYWORD2">first</span>;
+    <span class="syntax-KEYWORD1">while</span> i <span class="syntax-KEYWORD1">is</span> <span class="syntax-KEYWORD1">not</span> <span class="syntax-KEYWORD1">null</span>
+    <span class="syntax-KEYWORD1">loop</span>
+      oe <span class="syntax-OPERATOR">:=</span> o.tuple<span class="syntax-OPERATOR">(</span>i<span class="syntax-OPERATOR">)</span>;
+      doOutput<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">object</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">entry:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">||</span>oe.<span class="syntax-KEYWORD1">name</span>, lvl<span class="syntax-OPERATOR">)</span>;
+      processElement<span class="syntax-OPERATOR">(</span>oe.<span class="syntax-KEYWORD2">value</span>, lvl<span class="syntax-OPERATOR">+</span><span class="syntax-DIGIT">1</span><span class="syntax-OPERATOR">)</span>;
+      i <span class="syntax-OPERATOR">:=</span> o.tuple.next<span class="syntax-OPERATOR">(</span>i<span class="syntax-OPERATOR">)</span>;
+    <span class="syntax-KEYWORD1">end</span> <span class="syntax-KEYWORD1">loop</span>;
+
+    doOutput<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">OBJECT</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">END</span><span class="syntax-LITERAL1">'</span>, lvl<span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">end</span> parseObject;
+
+  <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">an</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">array</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">contains</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">elements</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">which</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">is</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">a</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">pljsonElements</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">nested</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">table</span>
+  <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">each</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">element</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">in</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">the</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">array</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">is</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">a</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">pljsonElement</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">object</span>
+  <span class="syntax-KEYWORD1">procedure</span> parseArray<span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD1">a</span> pljsonArray, lvl <span class="syntax-KEYWORD1">binary_integer</span><span class="syntax-OPERATOR">)</span>
+  <span class="syntax-KEYWORD1">is</span>
+    i <span class="syntax-KEYWORD1">binary_integer</span>;
+  <span class="syntax-KEYWORD1">begin</span>
+    <span class="syntax-COMMENT1">--</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">demonstrate</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">traversing</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">the</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">elements</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">of</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">an</span><span class="syntax-COMMENT1"> </span><span class="syntax-COMMENT1">array</span>
+    doOutput<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">ARRAY</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">START</span><span class="syntax-LITERAL1">'</span>, lvl<span class="syntax-OPERATOR">)</span>;
+    i <span class="syntax-OPERATOR">:=</span> <span class="syntax-KEYWORD1">a</span>.elements.<span class="syntax-KEYWORD2">first</span>;
+    <span class="syntax-KEYWORD1">while</span> i <span class="syntax-KEYWORD1">is</span> <span class="syntax-KEYWORD1">not</span> <span class="syntax-KEYWORD1">null</span>
+    <span class="syntax-KEYWORD1">loop</span>
+      processElement<span class="syntax-OPERATOR">(</span><span class="syntax-KEYWORD1">a</span>.elements<span class="syntax-OPERATOR">(</span>i<span class="syntax-OPERATOR">)</span>, lvl<span class="syntax-OPERATOR">+</span><span class="syntax-DIGIT">1</span><span class="syntax-OPERATOR">)</span>;
+      i <span class="syntax-OPERATOR">:=</span> <span class="syntax-KEYWORD1">a</span>.elements.next<span class="syntax-OPERATOR">(</span>i<span class="syntax-OPERATOR">)</span>;
+    <span class="syntax-KEYWORD1">end</span> <span class="syntax-KEYWORD1">loop</span>;
+    doOutput<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">ARRAY</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">END</span><span class="syntax-LITERAL1">'</span>, lvl<span class="syntax-OPERATOR">)</span>;
+  <span class="syntax-KEYWORD1">end</span> parseArray;
+
+  <span class="syntax-KEYWORD1">procedure</span> processElement<span class="syntax-OPERATOR">(</span>e pljsonElement, lvl <span class="syntax-KEYWORD1">binary_integer</span><span class="syntax-OPERATOR">)</span>
+  <span class="syntax-KEYWORD1">is</span>
+  <span class="syntax-KEYWORD1">begin</span>
+    <span class="syntax-KEYWORD1">case</span> <span class="syntax-KEYWORD1">when</span> e.isNull      <span class="syntax-KEYWORD1">then</span> doOutput<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">NULL</span><span class="syntax-LITERAL1">'</span>, lvl<span class="syntax-OPERATOR">)</span>;
+         <span class="syntax-KEYWORD1">when</span> e.isPrimitive <span class="syntax-KEYWORD1">then</span> doOutput<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">primitive:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">||</span>e.getString<span class="syntax-OPERATOR">(</span><span class="syntax-OPERATOR">)</span>, lvl<span class="syntax-OPERATOR">)</span>;
+         <span class="syntax-KEYWORD1">when</span> e.isObject    <span class="syntax-KEYWORD1">then</span> parseObject<span class="syntax-OPERATOR">(</span>pljson.getObject<span class="syntax-OPERATOR">(</span>e<span class="syntax-OPERATOR">)</span>, lvl<span class="syntax-OPERATOR">)</span>;
+         <span class="syntax-KEYWORD1">when</span> e.isArray     <span class="syntax-KEYWORD1">then</span> parseArray<span class="syntax-OPERATOR">(</span>pljson.getArray<span class="syntax-OPERATOR">(</span>e<span class="syntax-OPERATOR">)</span>, lvl<span class="syntax-OPERATOR">)</span>;
+    <span class="syntax-KEYWORD1">end</span> <span class="syntax-KEYWORD1">case</span>;
+ <span class="syntax-KEYWORD1">end</span>;
+
+<span class="syntax-KEYWORD1">begin</span>
+  t1 <span class="syntax-OPERATOR">:=</span> <span class="syntax-KEYWORD2">systimestamp</span>;
+  root <span class="syntax-OPERATOR">:=</span> pljson.parseJson<span class="syntax-OPERATOR">(</span>:json<span class="syntax-OPERATOR">)</span>;
+  t2 <span class="syntax-OPERATOR">:=</span> <span class="syntax-KEYWORD2">systimestamp</span>;
+
+  doOutput<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">time</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">to</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">parse:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">||</span><span class="syntax-KEYWORD2">to_char</span><span class="syntax-OPERATOR">(</span>t2<span class="syntax-OPERATOR">-</span>t1<span class="syntax-OPERATOR">)</span>, <span class="syntax-DIGIT">0</span><span class="syntax-OPERATOR">)</span>;
+
+  t1 <span class="syntax-OPERATOR">:=</span> <span class="syntax-KEYWORD2">systimestamp</span>;
+  processElement<span class="syntax-OPERATOR">(</span>root, <span class="syntax-DIGIT">0</span><span class="syntax-OPERATOR">)</span>;
+  t2 <span class="syntax-OPERATOR">:=</span> <span class="syntax-KEYWORD2">systimestamp</span>;
+
+  doOutput<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">time</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">to</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">process:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">||</span><span class="syntax-KEYWORD2">to_char</span><span class="syntax-OPERATOR">(</span>t2<span class="syntax-OPERATOR">-</span>t1<span class="syntax-OPERATOR">)</span>, <span class="syntax-DIGIT">0</span><span class="syntax-OPERATOR">)</span>;
+
+  t1 <span class="syntax-OPERATOR">:=</span> <span class="syntax-KEYWORD2">systimestamp</span>;
+  :clb <span class="syntax-OPERATOR">:=</span> pljson.makeJson<span class="syntax-OPERATOR">(</span>root, <span class="syntax-KEYWORD1">false</span><span class="syntax-OPERATOR">)</span>;
+  t2 <span class="syntax-OPERATOR">:=</span> <span class="syntax-KEYWORD2">systimestamp</span>;
+
+  doOutput<span class="syntax-OPERATOR">(</span><span class="syntax-LITERAL1">'</span><span class="syntax-LITERAL1">time</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">to</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">stream:</span><span class="syntax-LITERAL1"> </span><span class="syntax-LITERAL1">'</span><span class="syntax-OPERATOR">||</span><span class="syntax-KEYWORD2">to_char</span><span class="syntax-OPERATOR">(</span>t2<span class="syntax-OPERATOR">-</span>t1<span class="syntax-OPERATOR">)</span>, <span class="syntax-DIGIT">0</span><span class="syntax-OPERATOR">)</span>;
+<span class="syntax-KEYWORD1">end</span>;
+<span class="syntax-OPERATOR">/</span>
+
+<span class="syntax-KEYWORD1">select</span> :clb <span class="syntax-KEYWORD1">from</span> dual;
+
+<span class="syntax-KEYWORD1">exit</span>
+
+</span></pre>
+
+
+</div></div></body>
+</html>
